@@ -1,54 +1,42 @@
 #[derive(Debug)]
 pub struct PgType<'a> {
-    pub oid: u32,
+    pub oid: i32,
     pub typname: &'a str,
-    pub typnamespace: u32,
-    pub typowner: u32,
+    pub typnamespace: i32,
+    pub typowner: i32,
     pub typlen: i16,
     pub typbyval: bool,
     pub typtype: &'a str,
     pub typcategory: &'a str,
     pub typisprefered: bool,
     pub typisdefined: bool,
-    pub typrelid: u32,
+    pub typrelid: i32,
     pub typsubscript: &'static str,
-    pub typelem: u32,
-    pub typarray: u32,
+    pub typelem: i32,
+    pub typarray: i32,
     pub typalign: &'static str,
     pub typstorage: &'static str,
-    pub typbasetype: u32,
+    pub typbasetype: i32,
     pub typreceive: &'static str,
-    pub typreceive_oid: u32,
+    pub typinput: &'static str,
 }
 
-impl<'a> PgType<'a> {
-    pub fn get_typinput(&self) -> String {
-        if let Some(ty_id) = PgTypeId::from_oid(self.oid) {
-            // TODO: It requires additional verification
-            match ty_id {
-                PgTypeId::ARRAYTEXT
-                | PgTypeId::ARRAYINT2
-                | PgTypeId::ARRAYINT4
-                | PgTypeId::ARRAYINT8
-                | PgTypeId::ARRAYFLOAT4
-                | PgTypeId::ARRAYFLOAT8
-                | PgTypeId::ARRAYBOOL
-                | PgTypeId::ARRAYBYTEA => "array_in".to_string(),
-                PgTypeId::TIMESTAMP
-                | PgTypeId::TIMESTAMPTZ
-                | PgTypeId::DATE
-                | PgTypeId::TIME
-                | PgTypeId::TIMETZ => self.typname.to_owned() + "_in",
-                PgTypeId::TSMULTIRANGE
-                | PgTypeId::NUMMULTIRANGE
-                | PgTypeId::DATEMULTIRANGE
-                | PgTypeId::INT4MULTIRANGE
-                | PgTypeId::INT8MULTIRANGE => "multirange_in".to_string(),
-                PgTypeId::MONEY => "cash_in".to_string(),
-                _ => self.typname.to_owned() + "in",
-            }
-        } else {
-            "record_in".to_string()
+impl PgType<'_> {
+    pub fn get_typreceive_oid(&self) -> i32 {
+        // TODO: Get from pg_proc
+        match self.typreceive {
+            "array_recv" => 2400,
+            "boolrecv" => 2436,
+            "float4recv" => 2424,
+            "float8recv" => 2426,
+            "int2recv" => 2404,
+            "int4recv" => 2406,
+            "int8recv" => 2408,
+            "numeric_recv" => 2460,
+            "textrecv" => 2414,
+            "timestamp_recv" => 2474,
+            "varcharrecv" => 2432,
+            _ => 0,
         }
     }
 
@@ -68,7 +56,7 @@ macro_rules! define_pg_types {
         }
 
         impl PgTypeId {
-            pub fn from_oid(oid: u32) -> Option<Self> {
+            pub fn from_oid(oid: i32) -> Option<Self> {
                 match oid {
                     0 => Some(Self::UNSPECIFIED),
                     $($OID => Some(Self::$NAME),)*
@@ -94,7 +82,7 @@ macro_rules! define_pg_types {
 
         $(
             const $NAME: &PgType = &PgType {
-                oid: PgTypeId::$NAME as u32,
+                oid: PgTypeId::$NAME as i32,
                 $($KEY: $VALUE,)*
             };
         )*
@@ -119,8 +107,8 @@ const UNSPECIFIED: &PgType = &PgType {
     typalign: "-",
     typstorage: "-",
     typbasetype: 0,
-    typreceive: "",
-    typreceive_oid: 0,
+    typreceive: "-",
+    typinput: "-",
 };
 
 define_pg_types![
@@ -142,7 +130,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "boolrecv",
-        typreceive_oid: 2436,
+        typinput: "boolin",
     },
 
     BYTEA (17) {
@@ -163,8 +151,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "bytearecv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "byteain",
     },
 
     NAME (19) {
@@ -185,8 +172,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "namerecv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "namein",
     },
 
     INT8 (20) {
@@ -207,7 +193,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "int8recv",
-        typreceive_oid: 2408,
+        typinput: "int8in",
     },
 
     INT2 (21) {
@@ -228,8 +214,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "int2recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "int2in",
     },
 
     INT4 (23) {
@@ -250,7 +235,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "int4recv",
-        typreceive_oid: 2406,
+        typinput: "int4in",
     },
 
     TEXT (25) {
@@ -271,7 +256,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "textrecv",
-        typreceive_oid: 2414,
+        typinput: "textin",
     },
 
     OID (26) {
@@ -292,8 +277,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "oidrecv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "oidin",
     },
 
     TID (27) {
@@ -314,8 +298,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "tidrecv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "tidin",
     },
 
     PGCLASS (83) {
@@ -336,8 +319,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "record_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "record_in",
     },
 
     FLOAT4 (700) {
@@ -358,7 +340,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "float4recv",
-        typreceive_oid: 2424,
+        typinput: "float4in",
     },
 
     FLOAT8 (701) {
@@ -379,7 +361,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "float8recv",
-        typreceive_oid: 2426,
+        typinput: "float8in",
     },
 
     MONEY (790) {
@@ -400,8 +382,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "cash_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "cash_in",
     },
 
     INET (869) {
@@ -422,8 +403,7 @@ define_pg_types![
         typstorage: "m",
         typbasetype: 0,
         typreceive: "inet_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "inet_in",
     },
 
     ARRAYBOOL (1000) {
@@ -444,8 +424,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "array_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "array_in",
     },
 
     ARRAYBYTEA (1001) {
@@ -466,8 +445,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "array_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "array_in",
     },
 
     ARRAYINT2 (1005) {
@@ -488,8 +466,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "array_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "array_in",
     },
 
     ARRAYINT4 (1007) {
@@ -510,8 +487,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "array_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "array_in",
     },
 
     ARRAYTEXT (1009) {
@@ -532,8 +508,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "array_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "array_in",
     },
 
     ARRAYINT8 (1016) {
@@ -554,8 +529,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "array_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "array_in",
     },
 
     ARRAYFLOAT4 (1021) {
@@ -576,8 +550,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "array_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "array_in",
     },
 
     ARRAYFLOAT8 (1022) {
@@ -598,8 +571,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "array_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "array_in",
     },
 
     ACLITEM (1033) {
@@ -620,8 +592,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "-",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "aclitemin",
     },
 
     ARRAYACLITEM (1034) {
@@ -642,8 +613,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "array_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "array_in",
     },
 
     BPCHAR (1042) {
@@ -664,8 +634,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "bpcharrecv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "bpcharin",
     },
 
     VARCHAR (1043) {
@@ -686,7 +655,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "varcharrecv",
-        typreceive_oid: 2432,
+        typinput: "varcharin",
     },
 
     DATE (1082) {
@@ -707,8 +676,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "date_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "date_in",
     },
 
     TIME (1083) {
@@ -729,8 +697,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "time_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "time_in",
     },
 
     TIMESTAMP (1114) {
@@ -751,7 +718,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "timestamp_recv",
-        typreceive_oid: 2474,
+        typinput: "timestamp_in",
     },
 
     TIMESTAMPTZ (1184) {
@@ -772,8 +739,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "timestamptz_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "timestamptz_in",
     },
 
     INTERVAL (1186) {
@@ -794,8 +760,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "interval_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "interval_in",
     },
 
     TIMETZ (1266) {
@@ -816,8 +781,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "timetz_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "timetz_in",
     },
 
     NUMERIC (1700) {
@@ -838,7 +802,7 @@ define_pg_types![
         typstorage: "m",
         typbasetype: 0,
         typreceive: "numeric_recv",
-        typreceive_oid: 2460,
+        typinput: "numeric_in",
     },
 
     RECORD (2249) {
@@ -859,8 +823,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "record_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "record_in",
     },
 
     ANYARRAY (2277) {
@@ -881,8 +844,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "anyarray_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "anyarray_in",
     },
 
     ANYELEMENT (2283) {
@@ -903,74 +865,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "-",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
-    },
-
-    INT4RANGE (3904) {
-        typname: "int4range",
-        typnamespace: 11,
-        typowner: 10,
-        typlen: -1,
-        typbyval: false,
-        typtype: "r",
-        typcategory: "R",
-        typisprefered: false,
-        typisdefined: true,
-        typrelid: 0,
-        typsubscript: "-",
-        typelem: 0,
-        typarray: 0,
-        typalign: "i",
-        typstorage: "x",
-        typbasetype: 0,
-        typreceive: "range_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
-    },
-
-    NUMRANGE (3906) {
-        typname: "numrange",
-        typnamespace: 11,
-        typowner: 10,
-        typlen: -1,
-        typbyval: false,
-        typtype: "r",
-        typcategory: "R",
-        typisprefered: false,
-        typisdefined: true,
-        typrelid: 0,
-        typsubscript: "-",
-        typelem: 0,
-        typarray: 0,
-        typalign: "i",
-        typstorage: "x",
-        typbasetype: 0,
-        typreceive: "range_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
-    },
-
-    TSRANGE (3908) {
-        typname: "tsrange",
-        typnamespace: 11,
-        typowner: 10,
-        typlen: -1,
-        typbyval: false,
-        typtype: "r",
-        typcategory: "R",
-        typisprefered: false,
-        typisdefined: true,
-        typrelid: 0,
-        typsubscript: "-",
-        typelem: 0,
-        typarray: 0,
-        typalign: "d",
-        typstorage: "x",
-        typbasetype: 0,
-        typreceive: "range_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "anyelement_in",
     },
 
     PGLSN (3220) {
@@ -991,8 +886,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "pg_lsn_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "pg_lsn_in",
     },
 
     ANYENUM (3500) {
@@ -1013,8 +907,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 0,
         typreceive: "-",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "anyenum_in",
     },
 
     ANYRANGE (3831) {
@@ -1035,8 +928,70 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "-",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "anyrange_in",
+    },
+
+    INT4RANGE (3904) {
+        typname: "int4range",
+        typnamespace: 11,
+        typowner: 10,
+        typlen: -1,
+        typbyval: false,
+        typtype: "r",
+        typcategory: "R",
+        typisprefered: false,
+        typisdefined: true,
+        typrelid: 0,
+        typsubscript: "-",
+        typelem: 0,
+        typarray: 0,
+        typalign: "i",
+        typstorage: "x",
+        typbasetype: 0,
+        typreceive: "range_recv",
+        typinput: "range_in",
+    },
+
+    NUMRANGE (3906) {
+        typname: "numrange",
+        typnamespace: 11,
+        typowner: 10,
+        typlen: -1,
+        typbyval: false,
+        typtype: "r",
+        typcategory: "R",
+        typisprefered: false,
+        typisdefined: true,
+        typrelid: 0,
+        typsubscript: "-",
+        typelem: 0,
+        typarray: 0,
+        typalign: "i",
+        typstorage: "x",
+        typbasetype: 0,
+        typreceive: "range_recv",
+        typinput: "range_in",
+    },
+
+    TSRANGE (3908) {
+        typname: "tsrange",
+        typnamespace: 11,
+        typowner: 10,
+        typlen: -1,
+        typbyval: false,
+        typtype: "r",
+        typcategory: "R",
+        typisprefered: false,
+        typisdefined: true,
+        typrelid: 0,
+        typsubscript: "-",
+        typelem: 0,
+        typarray: 0,
+        typalign: "d",
+        typstorage: "x",
+        typbasetype: 0,
+        typreceive: "range_recv",
+        typinput: "range_in",
     },
 
     TSTZRANGE (3910) {
@@ -1057,8 +1012,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "range_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "range_in",
     },
 
     DATERANGE (3912) {
@@ -1079,8 +1033,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "range_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "range_in",
     },
 
     INT8RANGE (3926) {
@@ -1101,96 +1054,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "range_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
-    },
-
-    NUMMULTIRANGE (4532) {
-        typname: "nummultirange",
-        typnamespace: 11,
-        typowner: 10,
-        typlen: -1,
-        typbyval: false,
-        typtype: "m",
-        typcategory: "R",
-        typisprefered: false,
-        typisdefined: true,
-        typrelid: 0,
-        typsubscript: "-",
-        typelem: 0,
-        typarray: 0,
-        typalign: "i",
-        typstorage: "x",
-        typbasetype: 0,
-        typreceive: "multirange_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
-    },
-
-    TSMULTIRANGE (4533) {
-        typname: "tsmultirange",
-        typnamespace: 11,
-        typowner: 10,
-        typlen: -1,
-        typbyval: false,
-        typtype: "m",
-        typcategory: "R",
-        typisprefered: false,
-        typisdefined: true,
-        typrelid: 0,
-        typsubscript: "-",
-        typelem: 0,
-        typarray: 0,
-        typalign: "d",
-        typstorage: "x",
-        typbasetype: 0,
-        typreceive: "multirange_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
-    },
-
-    DATEMULTIRANGE (4535) {
-        typname: "datemultirange",
-        typnamespace: 11,
-        typowner: 10,
-        typlen: -1,
-        typbyval: false,
-        typtype: "m",
-        typcategory: "R",
-        typisprefered: false,
-        typisdefined: true,
-        typrelid: 0,
-        typsubscript: "-",
-        typelem: 0,
-        typarray: 0,
-        typalign: "i",
-        typstorage: "x",
-        typbasetype: 0,
-        typreceive: "multirange_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
-    },
-
-    INT8MULTIRANGE (4536) {
-        typname: "int8multirange",
-        typnamespace: 11,
-        typowner: 10,
-        typlen: -1,
-        typbyval: false,
-        typtype: "m",
-        typcategory: "R",
-        typisprefered: false,
-        typisdefined: true,
-        typrelid: 0,
-        typsubscript: "-",
-        typelem: 0,
-        typarray: 0,
-        typalign: "d",
-        typstorage: "x",
-        typbasetype: 0,
-        typreceive: "multirange_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "range_in",
     },
 
     INT4MULTIRANGE (4451) {
@@ -1211,8 +1075,91 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 0,
         typreceive: "multirange_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "multirange_in",
+    },
+
+    NUMMULTIRANGE (4532) {
+        typname: "nummultirange",
+        typnamespace: 11,
+        typowner: 10,
+        typlen: -1,
+        typbyval: false,
+        typtype: "m",
+        typcategory: "R",
+        typisprefered: false,
+        typisdefined: true,
+        typrelid: 0,
+        typsubscript: "-",
+        typelem: 0,
+        typarray: 0,
+        typalign: "i",
+        typstorage: "x",
+        typbasetype: 0,
+        typreceive: "multirange_recv",
+        typinput: "multirange_in",
+    },
+
+    TSMULTIRANGE (4533) {
+        typname: "tsmultirange",
+        typnamespace: 11,
+        typowner: 10,
+        typlen: -1,
+        typbyval: false,
+        typtype: "m",
+        typcategory: "R",
+        typisprefered: false,
+        typisdefined: true,
+        typrelid: 0,
+        typsubscript: "-",
+        typelem: 0,
+        typarray: 0,
+        typalign: "d",
+        typstorage: "x",
+        typbasetype: 0,
+        typreceive: "multirange_recv",
+        typinput: "multirange_in",
+    },
+
+    DATEMULTIRANGE (4535) {
+        typname: "datemultirange",
+        typnamespace: 11,
+        typowner: 10,
+        typlen: -1,
+        typbyval: false,
+        typtype: "m",
+        typcategory: "R",
+        typisprefered: false,
+        typisdefined: true,
+        typrelid: 0,
+        typsubscript: "-",
+        typelem: 0,
+        typarray: 0,
+        typalign: "i",
+        typstorage: "x",
+        typbasetype: 0,
+        typreceive: "multirange_recv",
+        typinput: "multirange_in",
+    },
+
+    INT8MULTIRANGE (4536) {
+        typname: "int8multirange",
+        typnamespace: 11,
+        typowner: 10,
+        typlen: -1,
+        typbyval: false,
+        typtype: "m",
+        typcategory: "R",
+        typisprefered: false,
+        typisdefined: true,
+        typrelid: 0,
+        typsubscript: "-",
+        typelem: 0,
+        typarray: 0,
+        typalign: "d",
+        typstorage: "x",
+        typbasetype: 0,
+        typreceive: "multirange_recv",
+        typinput: "multirange_in",
     },
 
     CHARACTERDATA (13408) {
@@ -1233,8 +1180,7 @@ define_pg_types![
         typstorage: "x",
         typbasetype: 1043,
         typreceive: "domain_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "domain_in",
     },
 
     SQLIDENTIFIER (13410) {
@@ -1255,8 +1201,7 @@ define_pg_types![
         typstorage: "p",
         typbasetype: 19,
         typreceive: "domain_recv",
-        // TODO: Get from pg_proc
-        typreceive_oid: 0,
+        typinput: "domain_in",
     },
 ];
 
