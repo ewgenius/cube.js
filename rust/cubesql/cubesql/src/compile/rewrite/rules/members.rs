@@ -782,54 +782,59 @@ impl MemberRules {
 
     pub fn transform_original_expr_date_trunc(
         original_expr_var: &'static str,
+        simplified_expr_var: Option<&'static str>,
         granularity_var: &'static str,
         column_expr_var: &'static str,
         alias_expr_var: Option<&'static str>,
         inner_replacer: bool,
     ) -> impl Fn(&mut EGraph<LogicalPlanLanguage, LogicalPlanAnalysis>, &mut Subst) -> bool {
         let original_expr_var = var!(original_expr_var);
+        let simplified_expr_var = if simplified_expr_var.is_some() {
+            var!(simplified_expr_var.unwrap())
+        } else {
+            original_expr_var
+        };
         let granularity_var = var!(granularity_var);
         let column_expr_var = var!(column_expr_var);
         let alias_expr_var = alias_expr_var.map(|alias_expr_var| var!(alias_expr_var));
         move |egraph, subst| {
-            let original_expr_id = subst[original_expr_var];
-            let res =
-                egraph[original_expr_id]
-                    .data
-                    .original_expr
-                    .as_ref()
-                    .ok_or(CubeError::internal(format!(
-                        "Original expr wasn't prepared for {:?}",
-                        original_expr_id
-                    )));
+            let exprs: Vec<Option<&Expr>> =
+                vec![subst[original_expr_var], subst[simplified_expr_var]]
+                    .iter()
+                    .map(|id| egraph[*id].data.original_expr.as_ref())
+                    .collect();
+            let (original_expr, simplified_expr) = match (exprs[0], exprs[1]) {
+                (Some(original), Some(simplified)) => (original, simplified),
+                _ => return false,
+            };
+
             for granularity in var_iter!(egraph[subst[granularity_var]], LiteralExprValue) {
                 match granularity {
                     ScalarValue::Utf8(Some(granularity)) => {
-                        if let Ok(expr) = res {
-                            // TODO unwrap
-                            let name = expr.name(&DFSchema::empty()).unwrap();
-                            let suffix_alias = format!("{}_{}", name, granularity);
-                            let alias = egraph.add(LogicalPlanLanguage::ColumnExprColumn(
-                                ColumnExprColumn(Column::from_name(suffix_alias.to_string())),
-                            ));
+                        // TODO unwrap
+                        let original_name = original_expr.name(&DFSchema::empty()).unwrap();
+                        let simplified_name = simplified_expr.name(&DFSchema::empty()).unwrap();
+                        let suffix_alias = format!("{}_{}", simplified_name, granularity);
+                        let alias = egraph.add(LogicalPlanLanguage::ColumnExprColumn(
+                            ColumnExprColumn(Column::from_name(suffix_alias.to_string())),
+                        ));
+                        subst.insert(
+                            column_expr_var,
+                            egraph.add(LogicalPlanLanguage::ColumnExpr([alias])),
+                        );
+                        if let Some(alias_expr_var) = alias_expr_var {
                             subst.insert(
-                                column_expr_var,
-                                egraph.add(LogicalPlanLanguage::ColumnExpr([alias])),
+                                alias_expr_var,
+                                egraph.add(LogicalPlanLanguage::AliasExprAlias(AliasExprAlias(
+                                    if inner_replacer {
+                                        suffix_alias.to_string()
+                                    } else {
+                                        original_name
+                                    },
+                                ))),
                             );
-                            if let Some(alias_expr_var) = alias_expr_var {
-                                subst.insert(
-                                    alias_expr_var,
-                                    egraph.add(LogicalPlanLanguage::AliasExprAlias(
-                                        AliasExprAlias(if inner_replacer {
-                                            suffix_alias.to_string()
-                                        } else {
-                                            name
-                                        }),
-                                    )),
-                                );
-                            }
-                            return true;
                         }
+                        return true;
                     }
                     _ => {}
                 }

@@ -348,6 +348,7 @@ impl RewriteRules for SplitRules {
                 ),
                 MemberRules::transform_original_expr_date_trunc(
                     "?expr",
+                    None,
                     "?granularity",
                     "?alias_column",
                     Some("?alias"),
@@ -373,10 +374,78 @@ impl RewriteRules for SplitRules {
                 ),
                 MemberRules::transform_original_expr_date_trunc(
                     "?expr",
+                    None,
                     "?granularity",
                     "?alias_column",
                     Some("?alias"),
                     false,
+                ),
+            ),
+            transforming_chain_rewrite(
+                "kek",
+                outer_aggregate_split_replacer(
+                    fun_expr(
+                        "DatePart",
+                        vec![literal_expr("?granularity"), "?original_expr".to_string()],
+                    ),
+                    "?cube",
+                ),
+                vec![(
+                    "?original_expr",
+                    fun_expr(
+                        "DateTrunc",
+                        vec![
+                            literal_expr("?granularity2"),
+                            "?simplified_expr".to_string(),
+                        ],
+                    ),
+                )],
+                fun_expr(
+                    "DatePart",
+                    vec![
+                        literal_expr("?granularity"),
+                        alias_expr("?alias_column", "?alias"),
+                    ],
+                ),
+                MemberRules::transform_original_expr_date_trunc(
+                    "?original_expr",
+                    Some("?simplified_expr"),
+                    "?granularity",
+                    "?alias_column",
+                    Some("?alias"),
+                    false,
+                ),
+            ),
+            transforming_chain_rewrite(
+                "kek2",
+                inner_aggregate_split_replacer(
+                    fun_expr(
+                        "DatePart",
+                        vec![
+                            literal_expr("?granularity"),
+                            fun_expr(
+                                "DateTrunc",
+                                vec!["?granularity2".to_string(), "?expr".to_string()],
+                            ),
+                        ],
+                    ),
+                    "?cube",
+                ),
+                vec![("?expr", column_expr("?column"))],
+                alias_expr(
+                    fun_expr(
+                        "DateTrunc",
+                        vec![literal_expr("?granularity"), column_expr("?column")],
+                    ),
+                    "?alias",
+                ),
+                MemberRules::transform_original_expr_date_trunc(
+                    "?expr",
+                    None,
+                    "?granularity",
+                    "?alias_column",
+                    Some("?alias"),
+                    true,
                 ),
             ),
             // Aggregate function
