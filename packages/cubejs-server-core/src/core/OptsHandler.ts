@@ -76,7 +76,7 @@ export class OptsHandler {
     optionsValidate(opts);
 
     if (
-      !this.configuredAsDevServer() &&
+      !this.isDevMode() &&
       !process.env.CUBEJS_DB_TYPE &&
       !opts.dbType &&
       !opts.driverFactory
@@ -332,8 +332,6 @@ export class OptsHandler {
       (getEnv('devMode') || definedExtDBVariables.length > 0) && 'cubestore' ||
       undefined;
 
-    const devServer = this.configuredAsDevServer();
-
     let externalDriverFactory =
       externalDbType &&
       (
@@ -352,7 +350,7 @@ export class OptsHandler {
       lookupDriverClass(externalDbType).dialectClass &&
       lookupDriverClass(externalDbType).dialectClass();
 
-    if (!devServer && getEnv('externalDefault') && !externalDbType) {
+    if (!this.isDevMode() && getEnv('externalDefault') && !externalDbType) {
       displayCLIWarning(
         'Cube Store is not found. Please follow this documentation ' +
         'to configure Cube Store ' +
@@ -360,7 +358,7 @@ export class OptsHandler {
       );
     }
 
-    if (devServer && externalDbType !== 'cubestore') {
+    if (this.isDevMode() && externalDbType !== 'cubestore') {
       displayCLIWarning(
         `Using ${externalDbType} as an external database is deprecated. ` +
         'Please use Cube Store instead: ' +
@@ -368,7 +366,7 @@ export class OptsHandler {
       );
     }
 
-    if (externalDbType === 'cubestore' && devServer && !opts.serverless) {
+    if (externalDbType === 'cubestore' && this.isDevMode() && !opts.serverless) {
       if (!definedExtDBVariables.length) {
         // There is no @cubejs-backend/cubestore-driver dependency in the core
         // package. At the same time, @cubejs-backend/cubestore-driver is already
@@ -421,7 +419,7 @@ export class OptsHandler {
     }
 
     const options: ServerCoreInitializedOptions = {
-      devServer,
+      devServer: this.isDevMode(),
       dialectFactory: (ctx) => (
         lookupDriverClass(ctx.dbType).dialectClass &&
         lookupDriverClass(ctx.dbType).dialectClass()
@@ -442,7 +440,9 @@ export class OptsHandler {
         parseInt(process.env.CUBEJS_SCHEDULED_REFRESH_CONCURRENCY, 10),
       preAggregationsSchema:
         getEnv('preAggregationsSchema') ||
-        (devServer ? 'dev_pre_aggregations' : 'prod_pre_aggregations'),
+        this.isDevMode()
+          ? 'dev_pre_aggregations'
+          : 'prod_pre_aggregations',
       schemaPath: process.env.CUBEJS_SCHEMA_PATH || 'schema',
       scheduledRefreshTimer: getEnv('refreshWorkerMode'),
       sqlCache: true,
@@ -520,9 +520,8 @@ export class OptsHandler {
    * Determines whether current instance should be bootstraped in the
    * dev mode or not.
    */
-  private configuredAsDevServer(): boolean {
+  private isDevMode(): boolean {
     return (
-      this.createOptions.devServer ||
       process.env.NODE_ENV !== 'production' ||
       getEnv('devMode')
     );
@@ -534,7 +533,7 @@ export class OptsHandler {
    */
   private configuredAsRefreshWorker(): boolean {
     return (
-      !this.initializedOptions.devServer &&
+      !this.isDevMode() &&
       this.configuredForScheduledRefresh()
     );
   }
@@ -545,7 +544,7 @@ export class OptsHandler {
    */
   private configuredAsApiWorker(): boolean {
     return (
-      !this.initializedOptions.devServer &&
+      !this.isDevMode() &&
       !this.configuredAsRefreshWorker()
     );
   }
@@ -556,7 +555,7 @@ export class OptsHandler {
    */
   private configuredAsPreAggsBuilder(): boolean {
     return (
-      this.initializedOptions.devServer ||
+      this.isDevMode() ||
       this.configuredAsRefreshWorker() ||
       this.configuredAsApiWorker() && getEnv('preAggregationsBuilder')
     );
